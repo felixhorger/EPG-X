@@ -1,4 +1,4 @@
-function [F0,Fn,Zn,F] = EPG_GRE(theta,phi,TR,T1,T2,varargin)
+function [F0, Fn, Zn, recording, FF] = EPG_GRE(theta,phi,TR,T1,T2,varargin)
 %   [F0,Fn,Zn,F] = EPG_GRE(theta,phi,TR,T1,T2,varargin)
 %
 %   Single pool EPG (classic version) for gradient echo sequences
@@ -45,14 +45,14 @@ function [F0,Fn,Zn,F] = EPG_GRE(theta,phi,TR,T1,T2,varargin)
 
 %% Extra variables
 
-for ii=1:length(varargin)
+for ii=1:2:length(varargin)
     
     % Kmax = this is the maximum EPG 'order' to consider
     % If this is infinity then don't do any pruning
     if strcmpi(varargin{ii},'kmax')
         kmax = varargin{ii+1};
     end
-    
+
     % Diffusion - structure contains, G, tau, D
     if strcmpi(varargin{ii},'diff')
         diff = varargin{ii+1};
@@ -62,36 +62,39 @@ for ii=1:length(varargin)
     if strcmpi(varargin{ii},'prep')
         prep = varargin{ii+1};
     end
+
+    if strcmpi(varargin{ii},'state')
+        FF = varargin{ii+1};
+    end
 end
 
 %%% The maximum order varies through the sequence. This can be used to speed up the calculation    
 np = length(theta);
 % if not defined, assume want max
+
 if ~exist('kmax','var')
     kmax = np - 1;
-end
-
-if isinf(kmax)
+elseif isinf(kmax)
     % this flags that we don't want any pruning of pathways
     allpathways = true;
     kmax = np-1; 
 else
-    allpathways = false;
+	% Use the all states < kmax from the beginning
+    allpathways = true;
+    %allpathways = false;
 end
+
 
 %%% Variable pathways
 if allpathways
-    kmax_per_pulse = (0:kmax) + 1; %<-- +1 because (0:kmax) is correct after each RF pulse, but we must increase order by one to also deal with subsequent shift
-    kmax_per_pulse(kmax_per_pulse>kmax)=kmax; %<-- don't exceed kmax, we break after last RF pulse
+    kmax_per_pulse = kmax * ones(np);
+	%kmax_per_pulse = (0:kmax) + 1; %<-- +1 because (0:kmax) is correct after each RF pulse, but we must increase order by one to also deal with subsequent shift
+    %kmax_per_pulse(end) = kmax; %<-- don't exceed kmax, we break after last RF pulse
 else
     kmax_per_pulse = [1:ceil(np/2) (floor(np/2)):-1:1];
-    kmax_per_pulse(kmax_per_pulse>kmax)=kmax;
-     
-    if max(kmax_per_pulse)<kmax
-        kmax = max(kmax_per_pulse);
-    end
+    kmax_per_pulse = 1 + k0 : 1 + k0 + np;
+    kmax_per_pulse(kmax_per_pulse > kmax) = 2 * kmax - kmax_per_pulse(kmax_per_pulse>kmax);
 end
-
 %%% Number of states is 6x(kmax +1) -- +1 for the zero order
 N=3*(kmax+1);
 
@@ -137,8 +140,10 @@ end
 F = zeros([N np]); %%<-- records the state after each RF pulse 
 
 %%% Initial State
-FF = zeros([N 1]);
-FF(3)=1;   % M0 - could be variable
+if ~exist('FF', 'var')
+	FF = zeros([N 1]);
+	FF(3)=1;   % M0 - could be variable
+end
 
 
 %% Prep pulse - execute here
@@ -173,9 +178,6 @@ for jj=1:np
     %%% multiplications into smaller ones might help
     F(kidx,jj)=T(kidx,kidx)*FF(kidx);
     
-    if jj==np
-        break
-    end
     
     %%% Now deal with evolution
     FF(kidx) = ES(kidx,kidx)*F(kidx,jj)+b(kidx);
@@ -189,7 +191,9 @@ end
 F0=F(1,:);
 
 %%% phase demodulate
-F0 = F0(:) .* exp(-1i*phi(:)) *1i;
+F0 = F0(:) * 1i; % Do not demodulate, phase shift by i because pulse with phase zero gives magnetisation with phase pi/2.
+% Original: F0 = F0(:) .* exp(-1i*phi(:)) * 1i;
+% Perhaps the *1i is obsolete as well, because that is in the rotation matrices ... but it doesn't matter (global phase)
 
 
 %%% Construct Fn and Zn

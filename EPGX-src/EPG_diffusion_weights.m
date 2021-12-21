@@ -48,9 +48,9 @@ end
         % The overall b value depends on the k-space value, hence we
         % account for each gradient lobe in order
         for jj=1:length(G)
-            kf = ki+gmT*G(jj)*tau(jj);
+            kf = ki + gmT*G(jj)*tau(jj);
             bT = bT + (tau(jj)/3)*(ki.^2+kf.^2+ki.*kf);
-            
+
             % now update ki for next gradient lobe
             ki=kf;
         end

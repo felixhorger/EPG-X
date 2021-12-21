@@ -1,5 +1,5 @@
-function [s,mxy,M] = isochromat_GRE(theta,phi,TR,T1,T2,Niso,varargin)
-%   [F0,Fn,Zn,F] = isochromat_GRE(theta,phi,TR,T1,T2,Niso,varargin)
+function [s,mxy,mz] = isochromat_GRE(theta,phi,TR,T1,T2,Niso,varargin)
+%   [s,mxy,mz] = isochromat_GRE(theta,phi,TR,T1,T2,Niso,varargin)
 %
 %   Single pool ISOCHROMAT simulation for gradient echo sequences
 %
@@ -38,8 +38,18 @@ function [s,mxy,M] = isochromat_GRE(theta,phi,TR,T1,T2,Niso,varargin)
 
 %% Extra variables
 
+%%% Fix number of TR periods
+Npulse = length(theta);
+
+%%% Isochromat phase distribution
+psi = 2*pi*(0:fix(Niso)-1)/fix(Niso);
+
+%%% Number of variables (each isochromat has Mx,My,Mz)
+N = 3*Niso;
+
 diffusion_calc = false;
 
+%%% Now get more variables from varargin
 for ii=1:length(varargin)
 
     % Prep pulse - struct contains flip (rad), t_delay
@@ -53,17 +63,19 @@ for ii=1:length(varargin)
         diffusion_calc = true;
     end
     
+    % User defined dephasing per TR (array of phase angles in radians, length Niso)
+    if strcmpi(varargin{ii},'psi')
+        psi = varargin{ii+1};
+        if length(psi)~=Niso
+            display('Error: length of variable psi should be Niso')
+            return
+        end
+    end
+    
     
 end
 
-%%% Fix number of TR periods
-Npulse = length(theta);
 
-%%% Isochromat phase distribution
-psi = 2*pi*(0:fix(Niso)-1)/fix(Niso);
-
-%%% Number of variables (each isochromat has Mx,My,Mz)
-N = 3*Niso;
 
 %%% Gradient dephasing matrices
 rg={};
@@ -171,7 +183,10 @@ mxy = M(xidx,:) + 1i*M(yidx,:);
 % Get signal from mean
 s = 1i*mean(mxy,1);
 % demodulate this
-s = s .* exp(-1i*phi(1:Npulse));
+s(:) = s(:) .* exp(-1i*phi(1:Npulse));
+
+% Get mz
+mz = M(zidx,:);
 
 
     function build_T_matrix_sub_implicit(AA)

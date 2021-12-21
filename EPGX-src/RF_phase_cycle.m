@@ -30,5 +30,7 @@ else
     end
 end
 
+phi = phi(:);
+
 end
 
